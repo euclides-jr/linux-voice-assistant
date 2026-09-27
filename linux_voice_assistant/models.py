@@ -131,6 +131,7 @@ class ServerState:
     satellite: "Optional[VoiceSatelliteProtocol]" = None
     connections: "List[VoiceSatelliteProtocol]" = field(default_factory=list)
     mute_switch_entity: "Optional[MuteSwitchEntity]" = None
+    livekit_switch_entity: "Optional[MuteSwitchEntity]" = None
     thinking_sound_entity: "Optional[ThinkingSoundEntity]" = None
     button_event_sensor_entity: "Optional[ButtonEventSensorEntity]" = None
 
@@ -171,6 +172,7 @@ class ServerState:
     button_controls_locked: bool = False
     output_only: bool = False
     muted: bool = False
+    livekit_enabled: bool = False
     connected: bool = False
     volume: float = 1.0
     oww_probability_cutoff: float = 0.7  # Dynamic threshold for OpenWakeWord

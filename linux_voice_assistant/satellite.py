@@ -95,7 +95,7 @@ class VoiceSatelliteProtocol(APIServer):
             if state.audio_input_channels >= 2:
                 self.supported_features |= VoiceAssistantFeature.MULTI_CHANNEL_AUDIO  # pylint: disable=no-member
 
-        existing_mute_switches = [entity for entity in self.state.entities if isinstance(entity, MuteSwitchEntity)]
+        existing_mute_switches = [entity for entity in self.state.entities if type(entity) is MuteSwitchEntity]
         existing_media_players = [entity for entity in self.state.entities if isinstance(entity, MediaPlayerEntity)]
 
         if existing_media_players:
@@ -180,6 +180,27 @@ class VoiceSatelliteProtocol(APIServer):
         thinking_sound_switch.update_get_thinking_sound_enabled(lambda: self.state.thinking_sound_enabled)
         thinking_sound_switch.update_set_thinking_sound_enabled(self._set_thinking_sound_enabled)
         thinking_sound_switch.sync_with_state()
+
+        livekit_switch = self.state.livekit_switch_entity
+        if livekit_switch is None:
+            livekit_switch = MuteSwitchEntity(
+                server=self,
+                key=len(state.entities),
+                name="Audio Bridge LiveKit",
+                object_id="audio_bridge_livekit",
+                get_muted=lambda: self.state.livekit_enabled,
+                set_muted=self._set_livekit_enabled,
+                icon="mdi:access-point-network",
+            )
+            self.state.entities.append(livekit_switch)
+            self.state.livekit_switch_entity = livekit_switch
+        elif livekit_switch not in self.state.entities:
+            self.state.entities.append(livekit_switch)
+
+        livekit_switch.server = self
+        livekit_switch.update_get_muted(lambda: self.state.livekit_enabled)
+        livekit_switch.update_set_muted(self._set_livekit_enabled)
+        livekit_switch.sync_with_state()
 
         # Add/update Wake Word 1 sensitivity number entity
         sensitivity_1_entity = self.state.sensitivity_1_number_entity
@@ -498,6 +519,11 @@ class VoiceSatelliteProtocol(APIServer):
             _LOGGER.debug("Thinking sound disabled")
             pass
         self.state.save_preferences()
+
+    def _set_livekit_enabled(self, new_state: bool) -> None:
+        self.state.livekit_enabled = bool(new_state)
+        if self.state.livekit_switch_entity is not None:
+            self.state.livekit_switch_entity.sync_with_state()
 
     def _set_button_controls_locked(self, new_state: bool) -> None:
         self.state.button_controls_locked = bool(new_state)

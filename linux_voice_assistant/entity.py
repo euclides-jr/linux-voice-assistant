@@ -286,6 +286,7 @@ class MuteSwitchEntity(ESPHomeEntity):
         object_id: str,
         get_muted: Callable[[], bool],
         set_muted: Callable[[bool], None],
+        icon: str = "mdi:microphone-off",
     ) -> None:
         ESPHomeEntity.__init__(self, server)
 
@@ -294,6 +295,7 @@ class MuteSwitchEntity(ESPHomeEntity):
         self.object_id = object_id
         self._get_muted = get_muted
         self._set_muted = set_muted
+        self.icon = icon
         self._switch_state = self._get_muted()  # Sync internal state with actual muted value on init
 
     def update_set_muted(self, set_muted: Callable[[bool], None]) -> None:
@@ -322,7 +324,7 @@ class MuteSwitchEntity(ESPHomeEntity):
                 key=self.key,
                 name=self.name,
                 entity_category=EntityCategory.CONFIG,
-                icon="mdi:microphone-off",
+                icon=self.icon,
             )
         elif isinstance(msg, SubscribeHomeAssistantStatesRequest):
             # Always return our internal switch state
