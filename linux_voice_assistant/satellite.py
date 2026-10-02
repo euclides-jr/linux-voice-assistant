@@ -51,6 +51,7 @@ from pyopen_wakeword import OpenWakeWord
 
 from .api_server import APIServer
 from .entity import (
+    BatterySensorEntity,
     ButtonEventSensorEntity,
     ButtonLockEntity,
     LEDLightEntity,
@@ -373,6 +374,29 @@ class VoiceSatelliteProtocol(APIServer):
         self._pipeline_active = False
         self._external_wake_words: Dict[str, VoiceAssistantExternalWakeWord] = {}
         self._disconnect_event = asyncio.Event()
+        self.battery_sensor_entity = next(
+            (entity for entity in self.state.entities if isinstance(entity, BatterySensorEntity)),
+            None,
+        )
+        if self.battery_sensor_entity is None:
+            self.battery_sensor_entity = BatterySensorEntity(
+                server=self,
+                key=len(self.state.entities),
+                name="Battery",
+                object_id="battery",
+            )
+            self.state.entities.append(self.battery_sensor_entity)
+        else:
+            self.battery_sensor_entity.server = self
+            self.battery_sensor_entity.sync_with_state()
+        self._battery_update_task = asyncio.create_task(self._battery_update_loop())
+
+    async def _battery_update_loop(self) -> None:
+        while True:
+            await asyncio.sleep(60)
+            state_message = self.battery_sensor_entity.update_state()
+            if state_message is not None:
+                self.state.broadcast([state_message])
 
     # ------------------------------------------------------------------
     # Peripheral API helper
@@ -1104,6 +1128,9 @@ class VoiceSatelliteProtocol(APIServer):
 
     def connection_lost(self, exc: Optional[Exception]) -> None:
         super().connection_lost(exc)
+        if self._battery_update_task is not None:
+            self._battery_update_task.cancel()
+            self._battery_update_task = None
 
         self._disconnect_event.set()
         self._is_streaming_audio = False

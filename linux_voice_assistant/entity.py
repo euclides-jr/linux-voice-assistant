@@ -21,6 +21,8 @@ from aioesphomeapi.api_pb2 import (  # type: ignore[attr-defined]
     NumberStateResponse,
     SelectCommandRequest,
     SelectStateResponse,
+    SensorStateResponse,
+    ListEntitiesSensorResponse,
     SubscribeHomeAssistantStatesRequest,
     SwitchCommandRequest,
     SwitchStateResponse,
@@ -32,6 +34,7 @@ from aioesphomeapi.model import (
     MediaPlayerEntityFeature,
     MediaPlayerState,
     NumberMode,
+    SensorStateClass,
 )
 from google.protobuf import message
 
@@ -57,6 +60,67 @@ class ESPHomeEntity:
     @abstractmethod
     def handle_message(self, msg: message.Message) -> Iterable[message.Message]:
         pass
+
+
+# -----------------------------------------------------------------------------
+class BatterySensorEntity(ESPHomeEntity):
+    """Expose the host battery percentage as a Home Assistant sensor."""
+
+    _BATTERY_CAPACITY_PATHS = (
+        "/sys/class/power_supply/battery/capacity",
+        "/sys/class/power_supply/bms/capacity",
+    )
+
+    def __init__(self, server: APIServer, key: int, name: str, object_id: str) -> None:
+        ESPHomeEntity.__init__(self, server)
+        self.key = key
+        self.name = name
+        self.object_id = object_id
+        self.state: Optional[float] = None
+        self.sync_with_state()
+
+    @classmethod
+    def _read_battery_level(cls) -> Optional[float]:
+        for path in cls._BATTERY_CAPACITY_PATHS:
+            try:
+                with open(path, encoding="utf-8") as capacity_file:
+                    value = float(capacity_file.read().strip())
+            except (OSError, ValueError):
+                continue
+            return max(0.0, min(100.0, value))
+        return None
+
+    def sync_with_state(self) -> None:
+        self.state = self._read_battery_level()
+
+    def update_state(self) -> Optional[SensorStateResponse]:
+        old_state = self.state
+        self.sync_with_state()
+        if self.state == old_state:
+            return None
+        return self._state_response()
+
+    def _state_response(self) -> SensorStateResponse:
+        response = SensorStateResponse(key=self.key, missing_state=self.state is None)
+        if self.state is not None:
+            response.state = self.state
+        return response
+
+    def handle_message(self, msg: message.Message) -> Iterable[message.Message]:
+        if isinstance(msg, ListEntitiesRequest):
+            yield ListEntitiesSensorResponse(
+                object_id=self.object_id,
+                key=self.key,
+                name=self.name,
+                icon="mdi:battery",
+                unit_of_measurement="%",
+                accuracy_decimals=0,
+                device_class="battery",
+                state_class=SensorStateClass.MEASUREMENT,
+            )
+        elif isinstance(msg, SubscribeHomeAssistantStatesRequest):
+            self.sync_with_state()
+            yield self._state_response()
 
 
 # -----------------------------------------------------------------------------
